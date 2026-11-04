@@ -221,7 +221,7 @@ python convert.py --config configs/moje.local.toml
 
 ### Spuštění vybraných složek
 
-Pokud chcete zpracovat pouze vybrané složky ze vstupního adresáře, uveďte jejich názvy za příkazem:
+Pokud chcete zpracovat pouze vybrané složky (Zakázky) ze vstupního adresáře, uveďte jejich názvy za příkazem:
 
 ```bash
 python convert.py Zakazka_001 Zakazka_002
