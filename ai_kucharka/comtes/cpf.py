@@ -187,6 +187,15 @@ test_tables = {
 
 
 class CPFWordFile(WordFile):
+
+    def get_cpf_data(self) -> dict:
+        return {
+            "source": self.name,
+            "header": self.get_cpf_header(),
+            "methods": self.get_cpf_methods(),
+            "tests": self.get_cpf_tests(),
+        }
+
     def get_cpf_header(self) -> dict[str, Any]:
 
 
@@ -374,21 +383,6 @@ class CPFWordFile(WordFile):
 
         return result 
 
-
-    def get_cpf_customer_requirement(self) -> str | None:
-        for paragraph in self.file.paragraphs:
-            text = paragraph.text.strip()
-
-            for label in customer_requirement_labels:
-                if text.startswith(label):
-                    value = text[len(label):].strip()
-
-                    if value.startswith(":"):
-                        value = value[1:].strip()
-
-                    return value or None
-
-        return None
 
 
 
@@ -629,13 +623,43 @@ class CPFWordFile(WordFile):
     def get_cpf_methods(self) -> list[dict[str, str]]:
         methods = []
 
+        customer_requirements = self.get_cpf_customer_requirements()
+
+        print("### CUSTOMER REQUIREMENTS ###")
+        print(customer_requirements)
+
         for key, value in self.find_labelled_paragraphs(method_labels):
+
             if key == "name":
-                method = {"name": value}
+
+                method = {
+                    "name": value
+                }
+
+                method_name = value.strip().casefold()
 
                 for series, labels in test_series_labels.items():
-                    if value.strip().lower() in [label.lower() for label in labels]:
+
+                    normalized_labels = [
+                        label.strip().casefold()
+                        for label in labels
+                    ]
+
+                    if method_name in normalized_labels:
+
                         method["test_series"] = series
+
+                        requirement = customer_requirements.get(series)
+
+                        print(
+                            f"METHOD={value!r} | "
+                            f"SERIES={series!r} | "
+                            f"REQUIREMENT={requirement!r}"
+                        )
+
+                        if requirement:
+                            method["customer_requirement"] = requirement
+
                         break
 
                 methods.append(method)
@@ -645,20 +669,82 @@ class CPFWordFile(WordFile):
 
         return methods
 
-    def get_cpf_data(self) -> dict:
-        data = {
-            "source": self.name,
-            "header": self.get_cpf_header(),
-            "methods": self.get_cpf_methods(),
-            "tests": self.get_cpf_tests(),
-        }
+    def get_cpf_customer_requirements(self) -> dict[str, str]:
 
-        customer_requirement = self.get_cpf_customer_requirement()
+        requirements = {}
+        current_series = None
 
-        if customer_requirement:
-            data["customer_requirement"] = customer_requirement
+        paragraphs = self.file.element.body.xpath(".//w:p")
 
-        return data
+        print("\n========== CUSTOMER REQUIREMENTS DEBUG ==========")
+
+        for paragraph in paragraphs:
+
+            text = "".join(
+                node.text or ""
+                for node in paragraph.xpath(".//w:t")
+            ).strip()
+
+            if not text:
+                continue
+
+            text_normalized = text.casefold()
+
+            # --------------------------------------------------
+            # Detekce Test Series
+            # --------------------------------------------------
+
+            detected_series = None
+
+            for series, labels in test_series_labels.items():
+
+                for label in labels:
+
+                    if label.casefold() in text_normalized:
+
+                        detected_series = series
+                        current_series = series
+
+                        print(
+                            f"SERIES FOUND: {series}"
+                            f" | TEXT: {text}"
+                        )
+
+                        break
+
+                if detected_series:
+                    break
+
+            # --------------------------------------------------
+            # Detekce Customer Requirement
+            # --------------------------------------------------
+
+            for label in customer_requirement_labels:
+
+                if text_normalized.startswith(label.casefold()):
+
+                    value = text[len(label):].strip()
+                    value = value.lstrip(" :\u00a0")
+
+                    print(
+                        f"REQUIREMENT FOUND"
+                        f" | CURRENT SERIES: {current_series}"
+                        f" | VALUE: {value}"
+                    )
+
+                    if value and current_series:
+
+                        requirements[current_series] = value
+
+                    break
+
+        print("FINAL REQUIREMENTS:")
+        print(requirements)
+
+        print("=================================================\n")
+
+        return requirements
+
 
 class CPFData(Data):
     excel_file_cls = ExcelFile
